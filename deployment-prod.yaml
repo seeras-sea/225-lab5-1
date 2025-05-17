@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flask-prod-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flask
+  template:
+    metadata:
+      labels:
+        app: flask
+    spec:
+      containers:
+      - name: flask
+        image: cithit/colli369:latest
+        ports:
+        - containerPort: 5000
+        volumeMounts:
+        - name: nfs-volume
+          mountPath: /nfs
+      volumes:
+      - name: nfs-volume
+        persistentVolumeClaim:
+          claimName: flask-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: flask-prod-service
+spec:
+  type: LoadBalancer 
+  loadBalancerIP: 10.48.10.170
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 5000
+  selector:
+    app: flask
