@@ -54,9 +54,44 @@ pipeline {
             steps {
                 script {
                     def kubeConfig = readFile(KUBECONFIG)
+                    
+                    // Delete the existing PersistentVolume
+                    sh "echo 'Deleting existing PersistentVolume...'"
+                    sh "kubectl delete pv flask-pv || true"
+                    
+                    // Wait to ensure deletion completes
+                    sh "echo 'Waiting for deletion to complete...'"
+                    sh "sleep 5"
+                    
+                    // Create new PersistentVolume with correct server IP
+                    sh """
+                    echo 'Creating new PersistentVolume...'
+                    cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: flask-pv
+  labels:
+    type: nfs
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteMany
+  nfs:
+    path: /srv/nfs/colli369
+    server: 10.48.10.138
+  persistentVolumeReclaimPolicy: Retain
+EOF
+                    """
+                    
+                    // Apply the rest of the deployment
+                    sh "echo 'Applying the rest of the deployment...'"
                     sh "kubectl delete --all deployments --namespace=default || true"
                     sh "sed -i 's|${DOCKER_IMAGE}:latest|${DOCKER_IMAGE}:${IMAGE_TAG}|' deployment-dev.yaml"
                     sh "kubectl apply -f deployment-dev.yaml"
+                    
+                    sh "echo 'Deployment complete!'"
                 }
             }
         }
