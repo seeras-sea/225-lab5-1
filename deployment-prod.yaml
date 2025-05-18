@@ -67,7 +67,7 @@ metadata:
   name: flask-prod-service
 spec:
   type: LoadBalancer 
-  loadBalancerIP: 10.48.10.216                                     
+  loadBalancerIP: 10.48.10.170
   ports:
   - protocol: TCP
     port: 80
