@@ -96,21 +96,22 @@ pipeline {
                     
                     // Increase wait time for pod to be fully ready
                     sh "echo 'Waiting for pod to be ready...'"
-                    sh "sleep 45"
+                    sh "sleep 60"
                     
-                    // Get the pod name with better error handling
+                    // Get the pod name with better error handling (without using jq)
                     sh "echo 'Getting pod name...'"
-                    def podCount = sh(script: "kubectl get pods -l app=flask -o json | jq '.items | length'", returnStdout: true).trim()
-                    sh "echo 'Number of pods found: ${podCount}'"
+                    def podOutput = sh(script: "kubectl get pods -l app=flask -o name", returnStdout: true).trim()
+                    sh "echo 'Pod output: ${podOutput}'"
                     
-                    if (podCount == "0") {
+                    if (podOutput == "") {
                         sh "echo 'ERROR: No pods found with label app=flask'"
                         sh "echo 'Checking pod creation issues:'"
                         sh "kubectl get events --sort-by=.metadata.creationTimestamp | grep -i error"
                         error "No pods found with label app=flask. Deployment failed."
                     }
                     
-                    def appPod = sh(script: "kubectl get pods -l app=flask -o jsonpath='{.items[0].metadata.name}'", returnStdout: true).trim()
+                    // Extract pod name from the output (format: pod/pod-name)
+                    def appPod = podOutput.replaceAll("pod/", "")
                     sh "echo 'Using pod: ${appPod}'"
                     
                     // Check pod status
@@ -135,8 +136,8 @@ pipeline {
                     
                     // Execute the script with the correct container name
                     sh "echo 'Executing data-gen.py...'"
-                    sh "kubectl exec ${appPod} -- ls -la /nfs/"
-                    sh "kubectl exec ${appPod} -- python3 -V"
+                    sh "kubectl exec ${appPod} -- ls -la /nfs/ || true"
+                    sh "kubectl exec ${appPod} -- python3 -V || true"
                     sh "kubectl exec ${appPod} -- python3 data-gen.py || { echo 'Failed to execute data-gen.py'; kubectl logs ${appPod}; exit 1; }"
                     
                     sh "echo 'Test data generation completed successfully'"
