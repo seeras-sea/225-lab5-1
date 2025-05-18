@@ -1,185 +1,119 @@
-pipeline {
-    agent any 
+from flask import Flask, request, render_template_string, redirect
+import sqlite3
 
-    environment {
-        DOCKER_CREDENTIALS_ID = 'roseaw-dockerhub'  
-        DOCKER_IMAGE = 'cithit/colli369'                                   //<-----change this to your MiamiID!
-        IMAGE_TAG = "build-${BUILD_NUMBER}"
-        GITHUB_URL = 'https://github.com/seeras-sea/225-lab5-1'     //<-----change this to match this new repository!
-        KUBECONFIG = credentials('colli369-225')                           //<-----change this to match your kubernetes credentials (MiamiID-225)! 
-    }
+app = Flask(__name__)
 
-    stages {
-        stage('Code Checkout') {
-            steps {
-                cleanWs()
-                checkout([$class: 'GitSCM', branches: [[name: '*/main']],
-                          userRemoteConfigs: [[url: "${GITHUB_URL}"]]])
-            }
-        }
+# Database file path
+DATABASE = '/nfs/app.db'
 
-        stage('Lint HTML') {
-            steps {
-                sh 'npm install htmlhint --save-dev'
-                sh 'npx htmlhint templates/*.html'
-            }
-        }
+def get_db():
+    db = sqlite3.connect(DATABASE)
+    db.row_factory = sqlite3.Row  # Enables name-based access to columns
+    return db
 
-        stage('Static Code Analysis') {
-            steps {
-                sh 'pip install pylint'
-                sh 'pylint --disable=C0111,C0103,C0303 *.py || true'
-            }
-        }
+def init_db():
+    with app.app_context():
+        db = get_db()
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS contacts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                phone TEXT NOT NULL,
+                email TEXT NOT NULL
+            );
+        ''')
+        db.commit()
 
-        stage('Build Docker Image') {
-            steps {
-                script {
-                    docker.build("${DOCKER_IMAGE}:${IMAGE_TAG}", "-f Dockerfile.build .")
-                }
-            }
-        }
+@app.route('/')
+def index():
+    db = get_db()
+    contacts = db.execute('SELECT * FROM contacts').fetchall()
+    
+    html = '''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Contact Manager</title>
+        <style>
+            body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background-color: #f5f5f5; }
+            h1 { color: #333; }
+            .container { max-width: 800px; margin: 0 auto; background-color: white; padding: 20px; border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
+            th { background-color: #f2f2f2; }
+            form { margin-top: 20px; }
+            input[type="text"], input[type="email"] { padding: 8px; width: 100%; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 3px; }
+            input[type="submit"] { padding: 8px 15px; background-color: #4CAF50; color: white; border: none; border-radius: 3px; cursor: pointer; }
+            input[type="submit"]:hover { background-color: #45a049; }
+            .delete-btn { padding: 5px 10px; background-color: #f44336; color: white; border: none; border-radius: 3px; cursor: pointer; }
+            .delete-btn:hover { background-color: #d32f2f; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>Contact Manager</h1>
+            
+            <form action="/add" method="post">
+                <h3>Add New Contact</h3>
+                <input type="text" name="name" placeholder="Name" required>
+                <input type="text" name="phone" placeholder="Phone" required>
+                <input type="email" name="email" placeholder="Email" required>
+                <input type="submit" value="Add Contact">
+            </form>
+            
+            <h3>Contacts</h3>
+            <table>
+                <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Phone</th>
+                    <th>Email</th>
+                    <th>Action</th>
+                </tr>
+                {% for contact in contacts %}
+                <tr>
+                    <td>{{ contact['id'] }}</td>
+                    <td>{{ contact['name'] }}</td>
+                    <td>{{ contact['phone'] }}</td>
+                    <td>{{ contact['email'] }}</td>
+                    <td>
+                        <form action="/delete/{{ contact['id'] }}" method="post">
+                            <button type="submit" class="delete-btn">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </table>
+        </div>
+    </body>
+    </html>
+    '''
+    
+    return render_template_string(html, contacts=contacts)
 
-        stage('Push Docker Image') {
-            steps {
-                script {
-                    docker.withRegistry('https://index.docker.io/v1/', "${DOCKER_CREDENTIALS_ID}") {
-                        docker.image("${DOCKER_IMAGE}:${IMAGE_TAG}").push()
-                    }
-                }
-            }
-        }
+@app.route('/add', methods=['POST'])
+def add_contact():
+    name = request.form['name']
+    phone = request.form['phone']
+    email = request.form['email']
+    
+    db = get_db()
+    db.execute('INSERT INTO contacts (name, phone, email) VALUES (?, ?, ?)', 
+               (name, phone, email))
+    db.commit()
+    
+    return redirect('/')
 
-        stage('Deploy to Dev Environment') {
-            steps {
-                script {
-                    def kubeConfig = readFile(KUBECONFIG)
-                    
-                    // Force delete the PV with a timeout
-                    sh "echo 'Attempting to delete PersistentVolume...'"
-                    sh "kubectl delete pv flask-pv --timeout=30s || true"
-                    
-                    // If it's still stuck, try force removal with a patch
-                    sh """
-                    echo 'Checking if PV still exists...'
-                    if kubectl get pv flask-pv &>/dev/null; then
-                        echo 'PV still exists, attempting force removal...'
-                        kubectl patch pv flask-pv -p '{"metadata":{"finalizers":null}}' --type=merge || true
-                        kubectl delete pv flask-pv --force --grace-period=0 || true
-                    else
-                        echo 'PV was successfully deleted'
-                    fi
-                    """
-                    
-                    // Wait a moment before proceeding
-                    sh "echo 'Waiting before creating new PV...'"
-                    sh "sleep 5"
-                    
-                    // Create new PersistentVolume with correct server IP
-                    sh """
-                    echo 'Creating new PersistentVolume...'
-                    cat <<EOF | kubectl apply -f -
-apiVersion: v1
-kind: PersistentVolume
-metadata:
-  name: flask-pv
-  labels:
-    type: nfs
-spec:
-  capacity:
-    storage: 1Gi
-  accessModes:
-    - ReadWriteMany
-  nfs:
-    path: /srv/nfs/colli369
-    server: 10.48.10.138
-  persistentVolumeReclaimPolicy: Retain
-EOF
-                    """
-                    
-                    // Apply the rest of the deployment
-                    sh "echo 'Applying the rest of the deployment...'"
-                    sh "kubectl delete --all deployments --namespace=default || true"
-                    sh "sed -i 's|${DOCKER_IMAGE}:latest|${DOCKER_IMAGE}:${IMAGE_TAG}|' deployment-dev.yaml"
-                    sh "kubectl apply -f deployment-dev.yaml"
-                    
-                    sh "echo 'Deployment complete!'"
-                }
-            }
-        }
+@app.route('/delete/<int:contact_id>', methods=['POST'])
+def delete_contact(contact_id):
+    db = get_db()
+    db.execute('DELETE FROM contacts WHERE id = ?', (contact_id,))
+    db.commit()
+    
+    return redirect('/')
 
-        stage('Generate Test Data') {
-            steps {
-                script {
-                    sh "sleep 15" // Wait for pod to be ready
-                    def appPod = sh(script: "kubectl get pods -l app=flask -o jsonpath='{.items[0].metadata.name}'", returnStdout: true).trim()
-                    sh "kubectl exec ${appPod} -- python3 data-gen.py"
-                }
-            }
-        }
-
-        stage("Run Acceptance Tests") {
-            steps {
-                script {
-                    sh 'docker stop qa-tests || true'
-                    sh 'docker rm qa-tests || true'
-                    sh 'docker build -t qa-tests -f Dockerfile.test .'
-                    sh 'docker run qa-tests'
-                }
-            }
-        }
-        
-        stage("Run Security Checks") {
-            steps {
-                sh 'docker pull public.ecr.aws/portswigger/dastardly:latest'
-                sh '''
-                    docker run --user $(id -u) -v ${WORKSPACE}:${WORKSPACE}:rw \
-                    -e BURP_START_URL=http://10.48.10.138 \
-                    -e BURP_REPORT_FILE_PATH=${WORKSPACE}/dastardly-report.xml \
-                    public.ecr.aws/portswigger/dastardly:latest
-                '''
-            }
-        }
-        
-        stage('Remove Test Data') {
-            steps {
-                script {
-                    def appPod = sh(script: "kubectl get pods -l app=flask -o jsonpath='{.items[0].metadata.name}'", returnStdout: true).trim()
-                    sh "kubectl exec ${appPod} -- python3 data-clear.py"
-                }
-            }
-        }
-        
-        stage('Deploy to Prod Environment') {
-            steps {
-                script {
-                    sh "sed -i 's|${DOCKER_IMAGE}:latest|${DOCKER_IMAGE}:${IMAGE_TAG}|' deployment-prod.yaml"
-                    sh "kubectl apply -f deployment-prod.yaml"
-                }
-            }
-        }
-         
-        stage('Check Kubernetes Cluster') {
-            steps {
-                script {
-                    sh "kubectl get all"
-                }
-            }
-        }
-    }
-
-    post {
-        always {
-            junit testResults: 'dastardly-report.xml', skipPublishingChecks: true
-        }
-        success {
-            slackSend color: "good", message: "Build Completed: ${env.JOB_NAME} ${env.BUILD_NUMBER}"
-        }
-        unstable {
-            slackSend color: "warning", message: "Build Unstable: ${env.JOB_NAME} ${env.BUILD_NUMBER}"
-        }
-        failure {
-            slackSend color: "danger", message: "Build Failed: ${env.JOB_NAME} ${env.BUILD_NUMBER}"
-        }
-    }
-}
+if __name__ == '__main__':
+    # Initialize the database
+    init_db()
+    # Run the app
+    app.run(host='0.0.0.0', port=5000)
