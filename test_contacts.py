@@ -20,7 +20,7 @@ class TestContacts(unittest.TestCase):
         self.driver.set_page_load_timeout(60)
         
         # Get the Flask app URL from environment variable or use the specified IP
-        self.flask_url = os.environ.get('FLASK_URL', 'http://10.48.10.170:5000')
+        self.flask_url = os.environ.get('FLASK_URL', 'http://10.48.10.216:5000')
         print(f"Using Flask URL: {self.flask_url}")
 
     def test_contacts(self):
