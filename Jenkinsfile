@@ -122,7 +122,9 @@ pipeline {
                     if (podOutput == "") {
                         sh "echo 'ERROR: No pods found with label app=flask'"
                         sh "echo 'Checking pod creation issues:'"
-                        sh "kubectl get events --sort-by=.metadata.creationTimestamp | grep -i error"
+                        sh "kubectl get events --sort-by=.metadata.creationTimestamp | grep -i error || true"
+                        sh "echo 'Checking all events:'"
+                        sh "kubectl get events --sort-by=.metadata.creationTimestamp | tail -n 20"
                         error "No pods found with label app=flask. Deployment failed."
                     }
                     
