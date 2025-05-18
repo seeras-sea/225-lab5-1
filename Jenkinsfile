@@ -60,6 +60,12 @@ pipeline {
                     sh "kubectl delete --all deployments --namespace=default || true"
                     sh "sed -i 's|${DOCKER_IMAGE}:latest|${DOCKER_IMAGE}:${IMAGE_TAG}|' deployment-dev.yaml"
                     
+                    // Delete existing PVC and PV if they exist
+                    sh "echo 'Cleaning up existing PV and PVC...'"
+                    sh "kubectl delete pvc flask-pvc || true"
+                    sh "kubectl delete pv flask-pv || true"
+                    sh "sleep 10"  // Wait for deletion to complete
+                    
                     // Apply the PV and PVC first
                     sh "echo 'Creating PV and PVC...'"
                     sh "kubectl apply -f deployment-dev.yaml"
@@ -76,6 +82,16 @@ pipeline {
                     // Wait for PVC to be bound
                     sh "echo 'Waiting for PVC to be bound...'"
                     sh "kubectl wait --for=condition=Bound pvc/flask-pvc --timeout=60s || true"
+                    
+                    // Check if PVC is bound
+                    def pvcStatus = sh(script: "kubectl get pvc flask-pvc -o jsonpath='{.status.phase}' || echo 'NotFound'", returnStdout: true).trim()
+                    sh "echo 'PVC status: ${pvcStatus}'"
+                    
+                    if (pvcStatus != "Bound") {
+                        sh "echo 'WARNING: PVC is not bound. Current status: ${pvcStatus}'"
+                        sh "kubectl get events | grep pvc"
+                        sh "echo 'Continuing anyway, but deployment may fail...'"
+                    }
                     
                     sh "echo 'Deployment complete!'"
                 }
