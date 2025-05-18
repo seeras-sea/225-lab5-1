@@ -12,8 +12,9 @@ spec:
     - ReadWriteMany
   nfs:
     path: /srv/nfs/colli369
-    server: 10.48.10.140
+    server: 10.48.10.216
   persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -25,6 +26,7 @@ spec:
   resources:
     requests:
       storage: 1Gi
+  storageClassName: ""
   selector:
     matchLabels:
       type: nfs
@@ -70,10 +72,11 @@ metadata:
     app: flask
     environment: dev
 spec:
+  type: LoadBalancer
+  loadBalancerIP: 10.48.10.216
   selector:
     app: flask
     environment: dev
   ports:
-    - port: 5000
+    - port: 80
       targetPort: 5000
-  type: ClusterIP
