@@ -55,12 +55,24 @@ pipeline {
                 script {
                     def kubeConfig = readFile(KUBECONFIG)
                     
-                    // Delete the existing PersistentVolume
-                    sh "echo 'Deleting existing PersistentVolume...'"
-                    sh "kubectl delete pv flask-pv || true"
+                    // Force delete the PV with a timeout
+                    sh "echo 'Attempting to delete PersistentVolume...'"
+                    sh "kubectl delete pv flask-pv --timeout=30s || true"
                     
-                    // Wait to ensure deletion completes
-                    sh "echo 'Waiting for deletion to complete...'"
+                    // If it's still stuck, try force removal with a patch
+                    sh """
+                    echo 'Checking if PV still exists...'
+                    if kubectl get pv flask-pv &>/dev/null; then
+                        echo 'PV still exists, attempting force removal...'
+                        kubectl patch pv flask-pv -p '{"metadata":{"finalizers":null}}' --type=merge || true
+                        kubectl delete pv flask-pv --force --grace-period=0 || true
+                    else
+                        echo 'PV was successfully deleted'
+                    fi
+                    """
+                    
+                    // Wait a moment before proceeding
+                    sh "echo 'Waiting before creating new PV...'"
                     sh "sleep 5"
                     
                     // Create new PersistentVolume with correct server IP
