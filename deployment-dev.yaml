@@ -1,23 +1,24 @@
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: flask-pv
+  name: flask-pv-dev
   labels:
     type: nfs
+    environment: dev
 spec:
   capacity:
     storage: 1Gi
   accessModes:
     - ReadWriteMany
   nfs:
-    path:  /srv/nfs/colli369         #local reference
-    server: 10.48.10.216
+    path: /srv/nfs/colli369
+    server: 10.48.10.140
   persistentVolumeReclaimPolicy: Retain
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: flask-pvc    
+  name: flask-pvc-dev
 spec:
   accessModes:
     - ReadWriteMany
@@ -27,46 +28,52 @@ spec:
   selector:
     matchLabels:
       type: nfs
----      
+      environment: dev
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: flask-prod-deployment
+  name: flask-dev-deployment
   labels:
     app: flask
+    environment: dev
 spec:
   replicas: 1
   selector:
     matchLabels:
       app: flask
+      environment: dev
   template:
     metadata:
       labels:
         app: flask
+        environment: dev
     spec:
       containers:
-        - name: flask
-          image: cithit/colli369:latest
-          ports:
-            - containerPort: 5000
-          volumeMounts:
-            - name: nfs-storage
-              mountPath: /nfs       
-      volumes:
+      - name: flask-container
+        image: cithit/colli369:latest
+        ports:
+        - containerPort: 5000
+        volumeMounts:
         - name: nfs-storage
-          persistentVolumeClaim:
-            claimName: flask-pvc    
+          mountPath: /nfs
+      volumes:
+      - name: nfs-storage
+        persistentVolumeClaim:
+          claimName: flask-pvc-dev
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: flask-prod-service
+  name: flask-dev-service
+  labels:
+    app: flask
+    environment: dev
 spec:
-  type: LoadBalancer 
-  loadBalancerIP: 10.48.10.216                                     
-  ports:
-  - protocol: TCP
-    port: 80
-    targetPort: 5000
   selector:
     app: flask
+    environment: dev
+  ports:
+    - port: 5000
+      targetPort: 5000
+  type: ClusterIP
