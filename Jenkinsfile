@@ -62,8 +62,8 @@ pipeline {
                     
                     // Delete existing PVC and PV if they exist
                     sh "echo 'Cleaning up existing PV and PVC...'"
-                    sh "kubectl delete pvc flask-pvc || true"
-                    sh "kubectl delete pv flask-pv || true"
+                    sh "kubectl delete pvc flask-pvc-dev || true"
+                    sh "kubectl delete pv flask-pv-dev || true"
                     sh "sleep 10"  // Wait for deletion to complete
                     
                     // Apply the PV and PVC first
@@ -72,19 +72,19 @@ pipeline {
                     
                     // Check PV and PVC status
                     sh "echo 'Checking PV status:'"
-                    sh "kubectl get pv"
-                    sh "kubectl describe pv flask-pv"
+                    sh "kubectl get pv | grep dev"
+                    sh "kubectl describe pv flask-pv-dev"
                     
                     sh "echo 'Checking PVC status:'"
-                    sh "kubectl get pvc"
-                    sh "kubectl describe pvc flask-pvc"
+                    sh "kubectl get pvc | grep dev"
+                    sh "kubectl describe pvc flask-pvc-dev"
                     
                     // Wait for PVC to be bound
                     sh "echo 'Waiting for PVC to be bound...'"
-                    sh "kubectl wait --for=condition=Bound pvc/flask-pvc --timeout=60s || true"
+                    sh "kubectl wait --for=condition=Bound pvc/flask-pvc-dev --timeout=60s || true"
                     
                     // Check if PVC is bound
-                    def pvcStatus = sh(script: "kubectl get pvc flask-pvc -o jsonpath='{.status.phase}' || echo 'NotFound'", returnStdout: true).trim()
+                    def pvcStatus = sh(script: "kubectl get pvc flask-pvc-dev -o jsonpath='{.status.phase}' || echo 'NotFound'", returnStdout: true).trim()
                     sh "echo 'PVC status: ${pvcStatus}'"
                     
                     if (pvcStatus != "Bound") {
@@ -103,7 +103,7 @@ pipeline {
                 script {
                     // Check if pods are running
                     sh "echo 'Checking if pods are running...'"
-                    def podsRunning = sh(script: "kubectl get pods -l app=flask", returnStdout: true).trim()
+                    def podsRunning = sh(script: "kubectl get pods -l app=flask,environment=dev", returnStdout: true).trim()
                     sh "echo 'Pods status: ${podsRunning}'"
                     
                     // Check for events that might explain why pods aren't running
@@ -116,16 +116,16 @@ pipeline {
                     
                     // Get the pod name with better error handling (without using jq)
                     sh "echo 'Getting pod name...'"
-                    def podOutput = sh(script: "kubectl get pods -l app=flask -o name", returnStdout: true).trim()
+                    def podOutput = sh(script: "kubectl get pods -l app=flask,environment=dev -o name", returnStdout: true).trim()
                     sh "echo 'Pod output: ${podOutput}'"
                     
                     if (podOutput == "") {
-                        sh "echo 'ERROR: No pods found with label app=flask'"
+                        sh "echo 'ERROR: No pods found with label app=flask,environment=dev'"
                         sh "echo 'Checking pod creation issues:'"
                         sh "kubectl get events --sort-by=.metadata.creationTimestamp | grep -i error || true"
                         sh "echo 'Checking all events:'"
                         sh "kubectl get events --sort-by=.metadata.creationTimestamp | tail -n 20"
-                        error "No pods found with label app=flask. Deployment failed."
+                        error "No pods found with label app=flask,environment=dev. Deployment failed."
                     }
                     
                     // Extract pod name from the output (format: pod/pod-name)
@@ -198,8 +198,47 @@ pipeline {
         stage('Deploy to Prod Environment') {
             steps {
                 script {
+                    // Update the image tag in the deployment file
+                    sh "echo 'Updating image tag in production deployment file...'"
                     sh "sed -i 's|${DOCKER_IMAGE}:latest|${DOCKER_IMAGE}:${IMAGE_TAG}|' deployment-prod.yaml"
+                    
+                    // Delete existing PVC and PV if they exist
+                    sh "echo 'Cleaning up existing production PV and PVC...'"
+                    sh "kubectl delete pvc flask-pvc-prod || true"
+                    sh "kubectl delete pv flask-pv-prod || true"
+                    sh "sleep 10"  // Wait for deletion to complete
+                    
+                    // Apply the production deployment
+                    sh "echo 'Applying the production deployment...'"
                     sh "kubectl apply -f deployment-prod.yaml"
+                    
+                    // Check PV and PVC status
+                    sh "echo 'Checking production PV status:'"
+                    sh "kubectl get pv | grep prod"
+                    sh "kubectl describe pv flask-pv-prod"
+                    
+                    sh "echo 'Checking production PVC status:'"
+                    sh "kubectl get pvc | grep prod"
+                    sh "kubectl describe pvc flask-pvc-prod"
+                    
+                    // Wait for PVC to be bound
+                    sh "echo 'Waiting for production PVC to be bound...'"
+                    sh "kubectl wait --for=condition=Bound pvc/flask-pvc-prod --timeout=60s || true"
+                    
+                    // Check if pods are running
+                    sh "echo 'Checking if production pods are running...'"
+                    sh "kubectl get pods -l app=flask-prod"
+                    
+                    // Wait for pods to be ready
+                    sh "echo 'Waiting for production pods to be ready...'"
+                    sh "sleep 60"
+                    
+                    // Check service status
+                    sh "echo 'Checking production service status:'"
+                    sh "kubectl get svc flask-prod-service"
+                    sh "kubectl describe svc flask-prod-service"
+                    
+                    sh "echo 'Production deployment complete!'"
                 }
             }
         }
