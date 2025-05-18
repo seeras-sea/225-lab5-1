@@ -66,6 +66,10 @@ pipeline {
                     sh "kubectl delete pv flask-pv-dev || true"
                     sh "sleep 10"  // Wait for deletion to complete
                     
+                    // Ensure the NFS server IP is correct in the deployment file
+                    sh "echo 'Ensuring NFS server IP is correct...'"
+                    sh "sed -i 's|server: .*|server: 10.48.10.140|' deployment-dev.yaml"
+                    
                     // Apply the PV and PVC first
                     sh "echo 'Creating PV and PVC...'"
                     sh "kubectl apply -f deployment-dev.yaml"
