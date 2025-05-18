@@ -29,4 +29,4 @@ RUN GECKODRIVER_VERSION="v0.33.0" \
 ENV DISPLAY=:99
 
 # Command to run on container start
-CMD ["python", "./test_html_elements.py"]
+CMD ["python", "./test_contacts.py"]
