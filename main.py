@@ -1,5 +1,6 @@
 from flask import Flask, request, render_template_string, redirect
 import sqlite3
+import os
 
 app = Flask(__name__)
 
@@ -34,19 +35,119 @@ def index():
     <html>
     <head>
         <title>Contact Manager</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
         <style>
-            body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background-color: #f5f5f5; }
-            h1 { color: #333; }
-            .container { max-width: 800px; margin: 0 auto; background-color: white; padding: 20px; border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-            th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
-            th { background-color: #f2f2f2; }
-            form { margin-top: 20px; }
-            input[type="text"], input[type="email"] { padding: 8px; width: 100%; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 3px; }
-            input[type="submit"] { padding: 8px 15px; background-color: #4CAF50; color: white; border: none; border-radius: 3px; cursor: pointer; }
-            input[type="submit"]:hover { background-color: #45a049; }
-            .delete-btn { padding: 5px 10px; background-color: #f44336; color: white; border: none; border-radius: 3px; cursor: pointer; }
-            .delete-btn:hover { background-color: #d32f2f; }
+            body { 
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+                margin: 0; 
+                padding: 0; 
+                background-color: #f0f2f5; 
+                color: #333;
+            }
+            h1 { 
+                color: #2c3e50; 
+                text-align: center;
+                margin-bottom: 30px;
+            }
+            h3 {
+                color: #3498db;
+                border-bottom: 2px solid #3498db;
+                padding-bottom: 10px;
+                margin-top: 30px;
+            }
+            .container { 
+                max-width: 900px; 
+                margin: 40px auto; 
+                background-color: white; 
+                padding: 30px; 
+                border-radius: 8px; 
+                box-shadow: 0 4px 15px rgba(0,0,0,0.1); 
+            }
+            table { 
+                width: 100%; 
+                border-collapse: collapse; 
+                margin-top: 20px;
+                box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            }
+            th, td { 
+                padding: 15px; 
+                text-align: left; 
+                border-bottom: 1px solid #e1e1e1; 
+            }
+            th { 
+                background-color: #3498db; 
+                color: white;
+                font-weight: 500;
+            }
+            tr:hover {
+                background-color: #f5f7fa;
+            }
+            form { 
+                margin-top: 20px; 
+                background-color: #f9f9f9;
+                padding: 20px;
+                border-radius: 5px;
+            }
+            input[type="text"], input[type="email"] { 
+                padding: 12px; 
+                width: 100%; 
+                margin-bottom: 15px; 
+                border: 1px solid #ddd; 
+                border-radius: 4px;
+                font-size: 16px;
+                transition: border 0.3s;
+            }
+            input[type="text"]:focus, input[type="email"]:focus {
+                border-color: #3498db;
+                outline: none;
+                box-shadow: 0 0 5px rgba(52, 152, 219, 0.5);
+            }
+            input[type="submit"] { 
+                padding: 12px 20px; 
+                background-color: #3498db; 
+                color: white; 
+                border: none; 
+                border-radius: 4px; 
+                cursor: pointer;
+                font-size: 16px;
+                transition: background-color 0.3s;
+            }
+            input[type="submit"]:hover { 
+                background-color: #2980b9; 
+            }
+            .delete-btn { 
+                padding: 8px 15px; 
+                background-color: #e74c3c; 
+                color: white; 
+                border: none; 
+                border-radius: 4px; 
+                cursor: pointer;
+                transition: background-color 0.3s;
+            }
+            .delete-btn:hover { 
+                background-color: #c0392b; 
+            }
+            .empty-message {
+                text-align: center;
+                padding: 20px;
+                color: #7f8c8d;
+                font-style: italic;
+            }
+            .header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+            .header-title {
+                margin: 0;
+            }
+            .count-badge {
+                background-color: #3498db;
+                color: white;
+                padding: 5px 10px;
+                border-radius: 20px;
+                font-size: 14px;
+            }
         </style>
     </head>
     <body>
@@ -61,7 +162,12 @@ def index():
                 <input type="submit" value="Add Contact">
             </form>
             
-            <h3>Contacts</h3>
+            <div class="header">
+                <h3 class="header-title">Contacts</h3>
+                <span class="count-badge">{{ contacts|length }} contacts</span>
+            </div>
+            
+            {% if contacts|length > 0 %}
             <table>
                 <tr>
                     <th>ID</th>
@@ -84,6 +190,9 @@ def index():
                 </tr>
                 {% endfor %}
             </table>
+            {% else %}
+            <div class="empty-message">No contacts found. Add your first contact above!</div>
+            {% endif %}
         </div>
     </body>
     </html>
