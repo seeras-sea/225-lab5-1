@@ -13,6 +13,15 @@ def get_db():
     return db
 
 def init_db():
+    # Ensure the directory exists
+    db_dir = os.path.dirname(DATABASE)
+    if not os.path.exists(db_dir):
+        try:
+            os.makedirs(db_dir)
+            print(f"Created directory: {db_dir}")
+        except Exception as e:
+            print(f"Error creating directory {db_dir}: {e}")
+    
     with app.app_context():
         db = get_db()
         db.execute('''
@@ -24,6 +33,7 @@ def init_db():
             );
         ''')
         db.commit()
+        print(f"Database initialized at {DATABASE}")
 
 @app.route('/')
 def index():
@@ -323,3 +333,6 @@ if __name__ == '__main__':
     init_db()
     # Run the app
     app.run(host='0.0.0.0', port=5000)
+
+
+

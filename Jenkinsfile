@@ -18,17 +18,12 @@ pipeline {
             }
         }
 
-        stage('Lint HTML') {
-            steps {
-                sh 'npm install htmlhint --save-dev'
-                sh 'npx htmlhint templates/*.html || true'
-            }
-        }
-
         stage('Static Code Analysis') {
             steps {
                 sh 'pip install pylint'
                 sh 'pylint --disable=C0111,C0103,C0303 *.py || true'
+                sh 'npm install htmlhint --save-dev'
+                sh 'npx htmlhint templates/*.html || true'
             }
         }
 
@@ -68,7 +63,10 @@ pipeline {
                     sh "kubectl wait --for=condition=Bound pvc/flask-pvc-dev --timeout=60s || true"
                     
                     // Wait for pods to be ready
-                    sh "sleep 60"
+                    sh "kubectl wait --for=condition=Ready pod -l app=flask,environment=dev --timeout=120s || true"
+                    
+                    // Give the app a moment to initialize
+                    sh "sleep 30"
                 }
             }
         }
@@ -76,8 +74,24 @@ pipeline {
         stage('Generate Test Data') {
             steps {
                 script {
+                    // Get the pod name
                     def appPod = sh(script: "kubectl get pods -l app=flask,environment=dev -o name", returnStdout: true).trim().replaceAll("pod/", "")
-                    sh "kubectl exec ${appPod} -- python3 data-gen.py || true"
+                    
+                    // Check if the pod exists
+                    if (appPod) {
+                        echo "Found pod: ${appPod}"
+                        
+                        // Copy the data-gen.py script to the pod
+                        sh "kubectl cp data-gen.py ${appPod}:/data-gen.py"
+                        
+                        // Execute the script
+                        sh "kubectl exec ${appPod} -- python3 /data-gen.py"
+                        
+                        // Verify the database was created
+                        sh "kubectl exec ${appPod} -- ls -la /nfs/"
+                    } else {
+                        error "No pod found with label app=flask,environment=dev"
+                    }
                 }
             }
         }
@@ -85,8 +99,11 @@ pipeline {
         stage("Run Acceptance Tests") {
             steps {
                 script {
+                    // Build the test container
                     sh 'docker build -t qa-tests -f Dockerfile.test .'
-                    sh 'docker run qa-tests'
+                    
+                    // Run the tests with the correct URL
+                    sh 'docker run --env FLASK_URL=http://10.48.10.216:80 qa-tests'
                 }
             }
         }
@@ -94,8 +111,21 @@ pipeline {
         stage('Remove Test Data') {
             steps {
                 script {
-                    def appPod = sh(script: "kubectl get pods -l app=flask -o jsonpath='{.items[0].metadata.name}'", returnStdout: true).trim()
-                    sh "kubectl exec ${appPod} -- python3 data-clear.py || true"
+                    // Get the pod name
+                    def appPod = sh(script: "kubectl get pods -l app=flask,environment=dev -o name", returnStdout: true).trim().replaceAll("pod/", "")
+                    
+                    // Check if the pod exists
+                    if (appPod) {
+                        echo "Found pod: ${appPod}"
+                        
+                        // Copy the data-clear.py script to the pod
+                        sh "kubectl cp data-clear.py ${appPod}:/data-clear.py"
+                        
+                        // Execute the script
+                        sh "kubectl exec ${appPod} -- python3 /data-clear.py"
+                    } else {
+                        echo "No pod found with label app=flask,environment=dev"
+                    }
                 }
             }
         }
@@ -115,7 +145,7 @@ pipeline {
                     sh "kubectl apply -f deployment-prod.yaml"
                     
                     // Wait for pods to be ready
-                    sh "sleep 60"
+                    sh "kubectl wait --for=condition=Ready pod -l app=flask-prod --timeout=120s || true"
                 }
             }
         }
@@ -123,7 +153,7 @@ pipeline {
 
     post {
         success {
-            slackSend color: "good", message: "Build Completed: ${env.JOB_NAME} ${env.BUILD_NUMBER}"
+            slackSend color: "good", message: "Build Completed Successfully: ${env.JOB_NAME} ${env.BUILD_NUMBER}"
         }
         unstable {
             slackSend color: "warning", message: "Build Unstable: ${env.JOB_NAME} ${env.BUILD_NUMBER}"
