@@ -144,8 +144,17 @@ pipeline {
                     // Apply the deployment
                     sh "kubectl apply -f deployment-prod.yaml"
                     
+                    // Wait for PVC to be bound
+                    sh "kubectl wait --for=condition=Bound pvc/flask-pvc-prod --timeout=60s || true"
+                    
                     // Wait for pods to be ready
-                    sh "kubectl wait --for=condition=Ready pod -l app=flask-prod --timeout=120s || true"
+                    sh "kubectl wait --for=condition=Ready pod -l app=flask-prod,environment=prod --timeout=120s || true"
+                    
+                    // Give the app a moment to initialize
+                    sh "sleep 30"
+                    
+                    // Check if the service is accessible
+                    sh "curl -s -o /dev/null -w '%{http_code}' http://10.48.10.170:80 || echo 'Service not accessible yet'"
                 }
             }
         }
