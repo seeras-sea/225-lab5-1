@@ -38,15 +38,18 @@ metadata:
   name: flask-prod-deployment
   labels:
     app: flask-prod
+    environment: prod
 spec:
   replicas: 1
   selector:
     matchLabels:
       app: flask-prod
+      environment: prod
   template:
     metadata:
       labels:
         app: flask-prod
+        environment: prod
     spec:
       containers:
         - name: flask
@@ -71,6 +74,9 @@ apiVersion: v1
 kind: Service
 metadata:
   name: flask-prod-service
+  labels:
+    app: flask-prod
+    environment: prod
 spec:
   type: LoadBalancer 
   loadBalancerIP: 10.48.10.170
@@ -80,3 +86,4 @@ spec:
     targetPort: 5000
   selector:
     app: flask-prod
+    environment: prod
