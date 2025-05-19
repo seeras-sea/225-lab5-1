@@ -14,6 +14,7 @@ spec:
     path: /srv/nfs/colli369
     server: 10.48.10.140
   persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -54,7 +55,13 @@ spec:
             - containerPort: 5000
           volumeMounts:
             - name: nfs-storage
-              mountPath: /nfs       
+              mountPath: /nfs
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 5000
+            initialDelaySeconds: 10
+            periodSeconds: 5
       volumes:
         - name: nfs-storage
           persistentVolumeClaim:
