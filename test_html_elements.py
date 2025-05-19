@@ -194,4 +194,5 @@ class TestHtmlElements(unittest.TestCase):
             # Take screenshot for debugging
             self.driver.save_screenshot('add_contact_error.png')
             raise
-    def test_contac
+
+    def test_edit_contact(self):
