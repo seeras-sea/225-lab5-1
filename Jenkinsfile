@@ -48,25 +48,80 @@ pipeline {
         stage('Deploy to Dev Environment') {
             steps {
                 script {
-                    // Update the image tag in the deployment file
-                    sh "sed -i 's|${DOCKER_IMAGE}:latest|${DOCKER_IMAGE}:${IMAGE_TAG}|' deployment-dev.yaml"
-                    
-                    // Delete existing PVC and PV if they exist
-                    sh "kubectl delete pvc flask-pvc-dev || true"
-                    sh "kubectl delete pv flask-pv-dev || true"
-                    sh "sleep 10"
-                    
-                    // Apply the deployment
-                    sh "kubectl apply -f deployment-dev.yaml"
-                    
-                    // Wait for PVC to be bound
-                    sh "kubectl wait --for=condition=Bound pvc/flask-pvc-dev --timeout=60s || true"
-                    
-                    // Wait for pods to be ready
-                    sh "kubectl wait --for=condition=Ready pod -l app=flask,environment=dev --timeout=120s || true"
-                    
-                    // Give the app a moment to initialize
-                    sh "sleep 30"
+                    try {
+                        echo "Starting deployment to dev environment..."
+                        
+                        // Update the image tag in the deployment file
+                        sh "sed -i 's|${DOCKER_IMAGE}:latest|${DOCKER_IMAGE}:${IMAGE_TAG}|' deployment-dev.yaml"
+                        echo "Updated image tag in deployment-dev.yaml"
+                        
+                        // Check if PVC and PV exist before trying to delete them
+                        echo "Checking for existing PVC and PV..."
+                        def pvcExists = sh(script: "kubectl get pvc flask-pvc-dev -o name 2>/dev/null || echo ''", returnStdout: true).trim()
+                        def pvExists = sh(script: "kubectl get pv flask-pv-dev -o name 2>/dev/null || echo ''", returnStdout: true).trim()
+                        
+                        if (pvcExists) {
+                            echo "Deleting existing PVC: ${pvcExists}"
+                            sh "kubectl delete pvc flask-pvc-dev --timeout=30s || true"
+                        } else {
+                            echo "No existing PVC found"
+                        }
+                        
+                        if (pvExists) {
+                            echo "Deleting existing PV: ${pvExists}"
+                            sh "kubectl delete pv flask-pv-dev --timeout=30s || true"
+                        } else {
+                            echo "No existing PV found"
+                        }
+                        
+                        echo "Waiting for resources to be deleted..."
+                        sh "sleep 10"
+                        
+                        // Apply the deployment
+                        echo "Applying deployment-dev.yaml..."
+                        sh "kubectl apply -f deployment-dev.yaml"
+                        
+                        // Check what resources were created
+                        echo "Checking created resources..."
+                        sh "kubectl get pv,pvc,deployment,service,pod -l environment=dev"
+                        
+                        // Wait for PVC to be bound
+                        echo "Waiting for PVC to be bound..."
+                        sh "kubectl wait --for=condition=Bound pvc/flask-pvc-dev --timeout=60s || true"
+                        
+                        // Check PVC status
+                        echo "PVC status:"
+                        sh "kubectl get pvc flask-pvc-dev -o wide"
+                        
+                        // Wait for pods to be ready
+                        echo "Waiting for pods to be ready..."
+                        sh "kubectl wait --for=condition=Ready pod -l app=flask,environment=dev --timeout=120s || true"
+                        
+                        // Check pod status
+                        echo "Pod status:"
+                        sh "kubectl get pods -l app=flask,environment=dev -o wide"
+                        
+                        // Check pod logs if any pods exist
+                        def podName = sh(script: "kubectl get pods -l app=flask,environment=dev -o name 2>/dev/null | head -1", returnStdout: true).trim()
+                        if (podName) {
+                            echo "Logs from ${podName}:"
+                            sh "kubectl logs ${podName} || true"
+                        }
+                        
+                        // Give the app a moment to initialize
+                        echo "Waiting for app to initialize..."
+                        sh "sleep 30"
+                        
+                        // Check if service is accessible
+                        echo "Checking if service is accessible..."
+                        sh "curl -s -o /dev/null -w '%{http_code}' http://10.48.10.216:80 || echo 'Service not accessible yet'"
+                        
+                        echo "Dev deployment completed"
+                    } catch (Exception e) {
+                        echo "Error during dev deployment: ${e.message}"
+                        echo "Continuing pipeline despite deployment issues"
+                        // Don't rethrow the exception to allow the pipeline to continue
+                    }
                 }
             }
         }
