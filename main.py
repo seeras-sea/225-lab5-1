@@ -115,17 +115,28 @@ def index():
             input[type="submit"]:hover { 
                 background-color: #2980b9; 
             }
-            .delete-btn { 
+            .btn { 
                 padding: 8px 15px; 
-                background-color: #e74c3c; 
                 color: white; 
                 border: none; 
                 border-radius: 4px; 
                 cursor: pointer;
                 transition: background-color 0.3s;
+                text-decoration: none;
+                display: inline-block;
+                margin-right: 5px;
+            }
+            .delete-btn { 
+                background-color: #e74c3c; 
             }
             .delete-btn:hover { 
                 background-color: #c0392b; 
+            }
+            .edit-btn {
+                background-color: #f39c12;
+            }
+            .edit-btn:hover {
+                background-color: #d35400;
             }
             .empty-message {
                 text-align: center;
@@ -147,6 +158,36 @@ def index():
                 padding: 5px 10px;
                 border-radius: 20px;
                 font-size: 14px;
+            }
+            .modal {
+                display: none;
+                position: fixed;
+                z-index: 1;
+                left: 0;
+                top: 0;
+                width: 100%;
+                height: 100%;
+                overflow: auto;
+                background-color: rgba(0,0,0,0.4);
+            }
+            .modal-content {
+                background-color: #fefefe;
+                margin: 15% auto;
+                padding: 20px;
+                border: 1px solid #888;
+                width: 80%;
+                max-width: 500px;
+                border-radius: 8px;
+            }
+            .close {
+                color: #aaa;
+                float: right;
+                font-size: 28px;
+                font-weight: bold;
+                cursor: pointer;
+            }
+            .close:hover {
+                color: black;
             }
         </style>
     </head>
@@ -174,7 +215,7 @@ def index():
                     <th>Name</th>
                     <th>Phone</th>
                     <th>Email</th>
-                    <th>Action</th>
+                    <th>Actions</th>
                 </tr>
                 {% for contact in contacts %}
                 <tr>
@@ -183,8 +224,9 @@ def index():
                     <td>{{ contact['phone'] }}</td>
                     <td>{{ contact['email'] }}</td>
                     <td>
-                        <form action="/delete/{{ contact['id'] }}" method="post">
-                            <button type="submit" class="delete-btn">Delete</button>
+                        <a href="#" onclick="openEditModal({{ contact['id'] }}, '{{ contact['name'] }}', '{{ contact['phone'] }}', '{{ contact['email'] }}')" class="btn edit-btn">Edit</a>
+                        <form action="/delete/{{ contact['id'] }}" method="post" style="display: inline;">
+                            <button type="submit" class="btn delete-btn">Delete</button>
                         </form>
                     </td>
                 </tr>
@@ -194,6 +236,47 @@ def index():
             <div class="empty-message">No contacts found. Add your first contact above!</div>
             {% endif %}
         </div>
+        
+        <!-- Edit Modal -->
+        <div id="editModal" class="modal">
+            <div class="modal-content">
+                <span class="close" onclick="closeEditModal()">&times;</span>
+                <h3>Edit Contact</h3>
+                <form id="editForm" action="/edit" method="post">
+                    <input type="hidden" id="editId" name="id">
+                    <input type="text" id="editName" name="name" placeholder="Name" required>
+                    <input type="text" id="editPhone" name="phone" placeholder="Phone" required>
+                    <input type="email" id="editEmail" name="email" placeholder="Email" required>
+                    <input type="submit" value="Save Changes">
+                </form>
+            </div>
+        </div>
+        
+        <script>
+            // Get the modal
+            var modal = document.getElementById("editModal");
+            
+            // Function to open the edit modal
+            function openEditModal(id, name, phone, email) {
+                document.getElementById("editId").value = id;
+                document.getElementById("editName").value = name;
+                document.getElementById("editPhone").value = phone;
+                document.getElementById("editEmail").value = email;
+                modal.style.display = "block";
+            }
+            
+            // Function to close the edit modal
+            function closeEditModal() {
+                modal.style.display = "none";
+            }
+            
+            // Close the modal when clicking outside of it
+            window.onclick = function(event) {
+                if (event.target == modal) {
+                    closeEditModal();
+                }
+            }
+        </script>
     </body>
     </html>
     '''
@@ -209,6 +292,20 @@ def add_contact():
     db = get_db()
     db.execute('INSERT INTO contacts (name, phone, email) VALUES (?, ?, ?)', 
                (name, phone, email))
+    db.commit()
+    
+    return redirect('/')
+
+@app.route('/edit', methods=['POST'])
+def edit_contact():
+    id = request.form['id']
+    name = request.form['name']
+    phone = request.form['phone']
+    email = request.form['email']
+    
+    db = get_db()
+    db.execute('UPDATE contacts SET name = ?, phone = ?, email = ? WHERE id = ?', 
+               (name, phone, email, id))
     db.commit()
     
     return redirect('/')
