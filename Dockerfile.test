@@ -1,15 +1,13 @@
-# Use an official Python runtime as a parent image
 FROM python:3.9-slim
 
 # Set the working directory in the container
 WORKDIR /usr/src/app
 
-# Copy the current directory contents into the container at /usr/src/app
+# Copy the current directory contents into the container
 COPY . .
 
-# Install Python dependencies from requirements.txt
-# Ensure it includes selenium
-RUN pip install --no-cache-dir -r requirements2.txt
+# Install Python dependencies
+RUN pip install --no-cache-dir flask selenium pytest
 
 # Install system dependencies required for Firefox and GeckoDriver
 RUN apt-get update && apt-get install -y \
@@ -29,4 +27,4 @@ RUN GECKODRIVER_VERSION="v0.33.0" \
 ENV DISPLAY=:99
 
 # Command to run on container start
-CMD ["python", "./test_contacts.py"]
+CMD ["python", "-m", "unittest", "test_html_elements.py"]
